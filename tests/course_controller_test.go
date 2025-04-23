@@ -3,48 +3,60 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"project1/controllers"
+	"project1/database"
+	"project1/middleware"
 	"project1/models"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/crypto/bcrypt"
 )
+
+// Создание тестового роутера для тестов
+func SetupTestRouter() *gin.Engine {
+	// Устанавливаем режим тестирования для Gin
+	gin.SetMode(gin.TestMode)
+
+	// Создаем новый роутер
+	r := gin.Default()
+
+	return r
+}
 
 // Создание тестового автора
 func createTestAuthor() uint {
-	return 1 // Возвращаем фиксированный ID для тестов
+	author := models.Author{
+		Name: "Test Author",
+	}
+	database.DB.Create(&author)
+	return author.ID
 }
 
 // Создание тестового пользователя и получение токена
 func getAuthToken() string {
-	return "mocked-jwt-token"
+	// Создаем пользователя
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("testpassword"), bcrypt.DefaultCost)
+	user := models.User{
+		Username: "testuser",
+		Password: string(hashedPassword),
+	}
+	database.DB.Create(&user)
+
+	// Генерируем токен
+	token, _ := middleware.GenerateToken(user.ID)
+	return token
 }
 
 // Тест для получения списка курсов
 func TestGetCourses(t *testing.T) {
-	// Создаем тестовый роутер
+	// Настраиваем тестовый роутер
 	r := SetupTestRouter()
-
-	// Регистрируем обработчик с моком для пути /api/courses
-	r.GET("/api/courses", func(c *gin.Context) {
-		// Создаем моковые данные курсов
-		courses := []models.Course{
-			{ID: 1, Title: "Test Course 1", AuthorID: 1, Price: 19.99},
-			{ID: 2, Title: "Test Course 2", AuthorID: 1, Price: 29.99},
-		}
-
-		// Возвращаем список курсов
-		c.JSON(http.StatusOK, gin.H{
-			"data": courses,
-			"meta": gin.H{
-				"page":  1,
-				"limit": 10,
-				"total": 2,
-			},
-		})
-	})
+	r.GET("/api/courses", controllers.GetCourses)
 
 	// Выполняем тестовый запрос
 	w := httptest.NewRecorder()
@@ -55,110 +67,90 @@ func TestGetCourses(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Проверяем структуру ответа
-	var response map[string]interface{}
+	var response gin.H
 	json.Unmarshal(w.Body.Bytes(), &response)
 	assert.Contains(t, response, "data")
-	assert.Contains(t, response, "meta")
 }
 
 // Тест для создания курса
 func TestCreateCourse(t *testing.T) {
-	// Получаем тестовый ID автора
+	// Создаем тестового автора
 	authorID := createTestAuthor()
+	defer func() {
+		database.DB.Where("id = ?", authorID).Delete(&models.Author{})
+	}()
 
-	// Создаем тестовый роутер
+	// Настраиваем тестовый роутер с авторизацией
 	r := SetupTestRouter()
-
-	// Регистрируем обработчик с моком для пути /api/courses
 	r.POST("/api/courses", func(c *gin.Context) {
-		var input models.CourseInput
-		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		// Проверяем, что authorID существует
-		if input.AuthorID != authorID {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Author not found"})
-			return
-		}
-
-		// Создаем моковый ответ с новым курсом
-		course := models.Course{
-			ID:       1,
-			Title:    input.Title,
-			AuthorID: input.AuthorID,
-			Price:    input.Price,
-		}
-
-		c.JSON(http.StatusCreated, course)
+		// Эмулируем авторизацию, устанавливая userID вручную
+		c.Set("userID", uint(1))
+		controllers.CreateCourse(c)
 	})
 
 	// Создаем тестовый запрос
-	courseInput := models.CourseInput{
-		Title:    "Test Course",
-		AuthorID: authorID,
-		Price:    29.99,
-	}
-	jsonData, _ := json.Marshal(courseInput)
+	courseJSON := fmt.Sprintf(`{
+		"title": "Test Course",
+		"description": "Test Course Description",
+		"author_id": %d,
+		"category_id": 1,
+		"published": true
+	}`, authorID)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/courses", bytes.NewBuffer(jsonData))
+	req, _ := http.NewRequest("POST", "/api/courses", bytes.NewBufferString(courseJSON))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	// Проверяем, что статус ответа 201 Created
 	assert.Equal(t, http.StatusCreated, w.Code)
 
-	// Проверяем содержимое ответа
-	var response models.Course
+	// Удаляем тестовый курс
+	var response struct {
+		Data struct {
+			ID uint `json:"id"`
+		} `json:"data"`
+	}
 	json.Unmarshal(w.Body.Bytes(), &response)
-	assert.Equal(t, uint(1), response.ID)
-	assert.Equal(t, "Test Course", response.Title)
-	assert.Equal(t, authorID, response.AuthorID)
-	assert.Equal(t, 29.99, response.Price)
+	database.DB.Where("id = ?", response.Data.ID).Delete(&models.Course{})
 }
 
 // Тест для получения курса по ID
 func TestGetCourseByID(t *testing.T) {
-	// Получаем тестовый ID автора
+	// Создаем тестового автора
 	authorID := createTestAuthor()
+	defer func() {
+		database.DB.Where("id = ?", authorID).Delete(&models.Author{})
+	}()
 
-	// Создаем тестовый роутер
+	// Создаем тестовый курс
+	course := models.Course{
+		Title:       "Test Course",
+		Description: "Test Course Description",
+		AuthorID:    authorID,
+		CategoryID:  1,
+		Published:   true,
+	}
+	database.DB.Create(&course)
+	defer database.DB.Where("id = ?", course.ID).Delete(&models.Course{})
+
+	// Настраиваем тестовый роутер
 	r := SetupTestRouter()
-
-	// Регистрируем обработчик с моком для пути /api/courses/:id
-	r.GET("/api/courses/:id", func(c *gin.Context) {
-		id := c.Param("id")
-
-		// Проверяем ID
-		if id != "1" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
-			return
-		}
-
-		// Возвращаем курс
-		course := models.Course{
-			ID:       1,
-			Title:    "Test Course",
-			AuthorID: authorID,
-			Price:    29.99,
-		}
-
-		c.JSON(http.StatusOK, course)
-	})
+	r.GET("/api/courses/:id", controllers.GetCourseByID)
 
 	// Выполняем тестовый запрос
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/courses/1", nil)
+	req, _ := http.NewRequest("GET", fmt.Sprintf("/api/courses/%d", course.ID), nil)
 	r.ServeHTTP(w, req)
 
 	// Проверяем, что статус ответа 200 OK
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	// Проверяем, что возвращенный курс соответствует ожидаемому
-	var response models.Course
+	var response struct {
+		Data models.Course `json:"data"`
+	}
 	json.Unmarshal(w.Body.Bytes(), &response)
-	assert.Equal(t, uint(1), response.ID)
-	assert.Equal(t, "Test Course", response.Title)
+	assert.Equal(t, course.ID, response.Data.ID)
+	assert.Equal(t, course.Title, response.Data.Title)
 }

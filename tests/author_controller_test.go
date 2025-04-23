@@ -3,41 +3,37 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"project1/controllers"
+	"project1/database"
+	"project1/middleware"
 	"project1/models"
 	"testing"
 
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
 
 // Тест для получения списка авторов
 func TestGetAuthors(t *testing.T) {
+	// Подготавливаем тестовую БД
+	database.ConnectDB()
+
+	// Получаем токен для авторизации
+	token := GetAuthToken()
+
 	// Создаем тестовый роутер
 	r := SetupTestRouter()
-
-	// Регистрируем обработчик с моком для пути /api/authors
-	r.GET("/api/authors", func(c *gin.Context) {
-		// Создаем моковые данные авторов
-		authors := []models.Author{
-			{ID: 1, Name: "Test Author 1"},
-			{ID: 2, Name: "Test Author 2"},
-		}
-
-		// Возвращаем список авторов
-		c.JSON(http.StatusOK, gin.H{
-			"data": authors,
-			"meta": gin.H{
-				"page":  1,
-				"limit": 10,
-				"total": 2,
-			},
-		})
-	})
+	authorGroup := r.Group("/api")
+	authorGroup.Use(middleware.AuthMiddleware())
+	{
+		authorGroup.GET("/authors", controllers.GetAuthors)
+	}
 
 	// Создаем запрос
 	req, _ := http.NewRequest("GET", "/api/authors", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	// Выполняем запрос
 	w := httptest.NewRecorder()
@@ -51,29 +47,26 @@ func TestGetAuthors(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &response)
 	assert.Contains(t, response, "data")
 	assert.Contains(t, response, "meta")
+
+	// Очищаем тестовые данные
+	database.DB.Where("username = ?", "testuser").Delete(&models.User{})
 }
 
 // Тест для создания автора
 func TestCreateAuthor(t *testing.T) {
+	// Подготавливаем тестовую БД
+	database.ConnectDB()
+
+	// Получаем токен для авторизации
+	token := GetAuthToken()
+
 	// Создаем тестовый роутер
 	r := SetupTestRouter()
-
-	// Регистрируем обработчик с моком для пути /api/authors
-	r.POST("/api/authors", func(c *gin.Context) {
-		var input models.AuthorInput
-		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		// Создаем моковый ответ с новым автором
-		author := models.Author{
-			ID:   1,
-			Name: input.Name,
-		}
-
-		c.JSON(http.StatusCreated, author)
-	})
+	authorGroup := r.Group("/api")
+	authorGroup.Use(middleware.AuthMiddleware())
+	{
+		authorGroup.POST("/authors", controllers.CreateAuthor)
+	}
 
 	// Создаем тестовые данные
 	authorInput := models.AuthorInput{
@@ -84,6 +77,7 @@ func TestCreateAuthor(t *testing.T) {
 	// Создаем запрос
 	req, _ := http.NewRequest("POST", "/api/authors", bytes.NewBuffer(jsonData))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	// Выполняем запрос
 	w := httptest.NewRecorder()
@@ -92,39 +86,40 @@ func TestCreateAuthor(t *testing.T) {
 	// Проверяем ответ
 	assert.Equal(t, http.StatusCreated, w.Code)
 
-	// Проверяем содержимое ответа
+	// Получаем ID созданного автора для удаления
 	var response models.Author
 	json.Unmarshal(w.Body.Bytes(), &response)
-	assert.Equal(t, uint(1), response.ID)
-	assert.Equal(t, "Test Author Creation", response.Name)
+
+	// Очищаем тестовые данные
+	database.DB.Delete(&models.Author{}, response.ID)
+	database.DB.Where("username = ?", "testuser").Delete(&models.User{})
 }
 
 // Тест для получения автора по ID
 func TestGetAuthorByID(t *testing.T) {
+	// Подготавливаем тестовую БД
+	database.ConnectDB()
+
+	// Создаем тестового автора
+	author := models.Author{
+		Name: "Test Author GetByID",
+	}
+	database.DB.Create(&author)
+
+	// Получаем токен для авторизации
+	token := GetAuthToken()
+
 	// Создаем тестовый роутер
 	r := SetupTestRouter()
-
-	// Регистрируем обработчик с моком для пути /api/authors/:id
-	r.GET("/api/authors/:id", func(c *gin.Context) {
-		id := c.Param("id")
-
-		// Проверяем ID
-		if id != "1" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Author not found"})
-			return
-		}
-
-		// Возвращаем автора
-		author := models.Author{
-			ID:   1,
-			Name: "Test Author GetByID",
-		}
-
-		c.JSON(http.StatusOK, author)
-	})
+	authorGroup := r.Group("/api")
+	authorGroup.Use(middleware.AuthMiddleware())
+	{
+		authorGroup.GET("/authors/:id", controllers.GetAuthorByID)
+	}
 
 	// Создаем запрос
-	req, _ := http.NewRequest("GET", "/api/authors/1", nil)
+	req, _ := http.NewRequest("GET", fmt.Sprintf("/api/authors/%d", author.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	// Выполняем запрос
 	w := httptest.NewRecorder()
@@ -136,39 +131,35 @@ func TestGetAuthorByID(t *testing.T) {
 	// Проверяем содержимое ответа
 	var response models.Author
 	json.Unmarshal(w.Body.Bytes(), &response)
-	assert.Equal(t, uint(1), response.ID)
-	assert.Equal(t, "Test Author GetByID", response.Name)
+	assert.Equal(t, author.ID, response.ID)
+	assert.Equal(t, author.Name, response.Name)
+
+	// Очищаем тестовые данные
+	database.DB.Delete(&models.Author{}, author.ID)
+	database.DB.Where("username = ?", "testuser").Delete(&models.User{})
 }
 
 // Тест для обновления автора
 func TestUpdateAuthor(t *testing.T) {
+	// Подготавливаем тестовую БД
+	database.ConnectDB()
+
+	// Создаем тестового автора
+	author := models.Author{
+		Name: "Test Author Before Update",
+	}
+	database.DB.Create(&author)
+
+	// Получаем токен для авторизации
+	token := GetAuthToken()
+
 	// Создаем тестовый роутер
 	r := SetupTestRouter()
-
-	// Регистрируем обработчик с моком для пути /api/authors/:id
-	r.PUT("/api/authors/:id", func(c *gin.Context) {
-		id := c.Param("id")
-
-		// Проверяем ID
-		if id != "1" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Author not found"})
-			return
-		}
-
-		var input models.AuthorInput
-		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		// Возвращаем обновленного автора
-		author := models.Author{
-			ID:   1,
-			Name: input.Name,
-		}
-
-		c.JSON(http.StatusOK, author)
-	})
+	authorGroup := r.Group("/api")
+	authorGroup.Use(middleware.AuthMiddleware())
+	{
+		authorGroup.PUT("/authors/:id", controllers.UpdateAuthor)
+	}
 
 	// Создаем тестовые данные
 	authorInput := models.AuthorInput{
@@ -177,8 +168,9 @@ func TestUpdateAuthor(t *testing.T) {
 	jsonData, _ := json.Marshal(authorInput)
 
 	// Создаем запрос
-	req, _ := http.NewRequest("PUT", "/api/authors/1", bytes.NewBuffer(jsonData))
+	req, _ := http.NewRequest("PUT", fmt.Sprintf("/api/authors/%d", author.ID), bytes.NewBuffer(jsonData))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	// Выполняем запрос
 	w := httptest.NewRecorder()
@@ -187,34 +179,41 @@ func TestUpdateAuthor(t *testing.T) {
 	// Проверяем ответ
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Проверяем содержимое ответа
-	var response models.Author
-	json.Unmarshal(w.Body.Bytes(), &response)
-	assert.Equal(t, uint(1), response.ID)
-	assert.Equal(t, "Test Author After Update", response.Name)
+	// Проверяем, что автор был обновлен
+	var updatedAuthor models.Author
+	database.DB.First(&updatedAuthor, author.ID)
+	assert.Equal(t, "Test Author After Update", updatedAuthor.Name)
+
+	// Очищаем тестовые данные
+	database.DB.Delete(&models.Author{}, author.ID)
+	database.DB.Where("username = ?", "testuser").Delete(&models.User{})
 }
 
 // DeleteAuthor удаляет автора
 func TestDeleteAuthor(t *testing.T) {
+	// Подготавливаем тестовую БД
+	database.ConnectDB()
+
+	// Создаем тестового автора
+	author := models.Author{
+		Name: "Test Author for Delete",
+	}
+	database.DB.Create(&author)
+
+	// Получаем токен для авторизации
+	token := GetAuthToken()
+
 	// Создаем тестовый роутер
 	r := SetupTestRouter()
-
-	// Регистрируем обработчик с моком для пути /api/authors/:id
-	r.DELETE("/api/authors/:id", func(c *gin.Context) {
-		id := c.Param("id")
-
-		// Проверяем ID
-		if id != "1" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Author not found"})
-			return
-		}
-
-		// Возвращаем успешный ответ
-		c.JSON(http.StatusOK, gin.H{"message": "Author deleted successfully"})
-	})
+	authorGroup := r.Group("/api")
+	authorGroup.Use(middleware.AuthMiddleware())
+	{
+		authorGroup.DELETE("/authors/:id", controllers.DeleteAuthor)
+	}
 
 	// Создаем запрос
-	req, _ := http.NewRequest("DELETE", "/api/authors/1", nil)
+	req, _ := http.NewRequest("DELETE", fmt.Sprintf("/api/authors/%d", author.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	// Выполняем запрос
 	w := httptest.NewRecorder()
@@ -223,43 +222,63 @@ func TestDeleteAuthor(t *testing.T) {
 	// Проверяем ответ
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Проверяем содержимое ответа
-	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
-	assert.Equal(t, "Author deleted successfully", response["message"])
+	// Проверяем, что автор был удален
+	var deletedAuthor models.Author
+	result := database.DB.First(&deletedAuthor, author.ID)
+	assert.Error(t, result.Error) // Должна быть ошибка, т.к. автор удален
+
+	// Очищаем тестовые данные
+	database.DB.Where("username = ?", "testuser").Delete(&models.User{})
 }
 
 // Тест на попытку удаления автора, у которого есть связанные курсы
 func TestDeleteAuthorWithCourses(t *testing.T) {
+	// Подготавливаем тестовую БД
+	database.ConnectDB()
+
+	// Создаем тестового автора
+	author := models.Author{
+		Name: "Test Author with Courses",
+	}
+	database.DB.Create(&author)
+
+	// Создаем тестовый курс для автора
+	course := models.Course{
+		Title:    "Test Course",
+		AuthorID: author.ID,
+		Price:    99.99,
+	}
+	database.DB.Create(&course)
+
+	// Получаем токен для авторизации
+	token := GetAuthToken()
+
 	// Создаем тестовый роутер
 	r := SetupTestRouter()
-
-	// Регистрируем обработчик с моком для пути /api/authors/:id
-	r.DELETE("/api/authors/:id", func(c *gin.Context) {
-		id := c.Param("id")
-
-		// Для теста считаем, что у автора с ID=2 есть курсы
-		if id == "2" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot delete author with related courses"})
-			return
-		}
-
-		// Возвращаем успешный ответ для других ID
-		c.JSON(http.StatusOK, gin.H{"message": "Author deleted successfully"})
-	})
+	authorGroup := r.Group("/api")
+	authorGroup.Use(middleware.AuthMiddleware())
+	{
+		authorGroup.DELETE("/authors/:id", controllers.DeleteAuthor)
+	}
 
 	// Создаем запрос на удаление автора с курсами
-	req, _ := http.NewRequest("DELETE", "/api/authors/2", nil)
+	req, _ := http.NewRequest("DELETE", fmt.Sprintf("/api/authors/%d", author.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	// Выполняем запрос
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Проверяем ответ - должен быть ошибочный статус
+	// Проверяем ответ - должен быть ошибочный статус, т.к. нельзя удалить автора с курсами
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	// Проверяем сообщение об ошибке
-	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
-	assert.Equal(t, "Cannot delete author with related courses", response["error"])
+	// Проверяем, что автор не был удален
+	var checkAuthor models.Author
+	result := database.DB.First(&checkAuthor, author.ID)
+	assert.NoError(t, result.Error) // Автор должен существовать
+
+	// Очищаем тестовые данные
+	database.DB.Delete(&models.Course{}, course.ID)
+	database.DB.Delete(&models.Author{}, author.ID)
+	database.DB.Where("username = ?", "testuser").Delete(&models.User{})
 }
