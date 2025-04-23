@@ -1,17 +1,13 @@
 package models
 
 import (
-	"time"
-
 	"github.com/golang-jwt/jwt/v5"
 )
 
 type User struct {
-	ID        uint      `json:"id" gorm:"primaryKey"`
-	Username  string    `json:"username" gorm:"uniqueIndex"`
-	Password  string    `json:"password,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID       uint   `json:"id" gorm:"primaryKey"`
+	Username string `json:"username" gorm:"uniqueIndex"`
+	Password string `json:"password,omitempty"`
 }
 
 type JWTClaim struct {
@@ -32,7 +28,7 @@ type RegisterInput struct {
 // PaginationParams используется для получения параметров пагинации
 type PaginationParams struct {
 	Page     int `form:"page" json:"page" binding:"min=1"`
-	PageSize int `form:"page_size" json:"page_size" binding:"min=1,max=100"`
+	PageSize int `form:"limit" json:"limit" binding:"min=1,max=100"`
 }
 
 // UserFilter используется для фильтрации пользователей

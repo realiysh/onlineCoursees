@@ -53,9 +53,9 @@ func GetAuthors(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"data": authors,
 		"meta": gin.H{
-			"page":      pagination.Page,
-			"page_size": pagination.PageSize,
-			"total":     total,
+			"page":  pagination.Page,
+			"limit": pagination.PageSize,
+			"total": total,
 		},
 	})
 }

@@ -53,9 +53,9 @@ func GetCategories(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"data": categories,
 		"meta": gin.H{
-			"page":      pagination.Page,
-			"page_size": pagination.PageSize,
-			"total":     total,
+			"page":  pagination.Page,
+			"limit": pagination.PageSize,
+			"total": total,
 		},
 	})
 }

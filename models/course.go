@@ -1,14 +1,10 @@
 package models
 
-import "time"
-
 type Course struct {
-	ID        uint      `json:"id" gorm:"primaryKey"`
-	Title     string    `json:"title"`
-	AuthorID  uint      `json:"author_id"`
-	Price     float64   `json:"price"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID       uint    `json:"id" gorm:"primaryKey"`
+	Title    string  `json:"title"`
+	AuthorID uint    `json:"author_id"`
+	Price    float64 `json:"price"`
 }
 
 // CourseInput используется для создания и обновления курсов

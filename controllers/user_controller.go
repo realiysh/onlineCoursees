@@ -113,9 +113,9 @@ func GetUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"data": users,
 		"meta": gin.H{
-			"page":      pagination.Page,
-			"page_size": pagination.PageSize,
-			"total":     total,
+			"page":  pagination.Page,
+			"limit": pagination.PageSize,
+			"total": total,
 		},
 	})
 }
