@@ -3,7 +3,6 @@ package database
 import (
 	"fmt"
 	"os"
-	"project1/models"
 
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
@@ -13,7 +12,7 @@ import (
 var DB *gorm.DB
 
 func ConnectDB() {
-
+	// Загружаем переменные окружения
 	if err := godotenv.Load(); err != nil {
 		fmt.Println("Warning: .env file not loaded")
 	}
@@ -34,11 +33,9 @@ func ConnectDB() {
 		panic("Failed to connect to database")
 	}
 
-	// Автоматическая миграция
-	if err := db.AutoMigrate(&models.User{}, &models.Course{}, &models.Author{}); err != nil {
-		panic("AutoMigrate failed")
-	}
-
 	// Сохраняем ссылку на DB
 	DB = db
+
+	// Запускаем миграции
+	RunMigrations()
 }

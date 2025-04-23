@@ -17,7 +17,6 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// Проверка, что пользователь с таким именем не существует
 	var existingUser models.User
 	if result := database.DB.Where("username = ?", input.Username).First(&existingUser); result.RowsAffected > 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Username already exists"})

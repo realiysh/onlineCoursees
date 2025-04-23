@@ -12,11 +12,9 @@ import (
 )
 
 const (
-	// Секретный ключ для подписи JWT
-	secretKey = "your-secret-key" // В идеале должен храниться в .env
+	secretKey = "your-secret-key"
 )
 
-// GenerateToken создает новый JWT токен для пользователя
 func GenerateToken(userID uint) (string, error) {
 	claims := &models.JWTClaim{
 		UserID: userID,
@@ -35,7 +33,6 @@ func GenerateToken(userID uint) (string, error) {
 	return tokenString, nil
 }
 
-// AuthMiddleware проверяет валидность JWT токена
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
