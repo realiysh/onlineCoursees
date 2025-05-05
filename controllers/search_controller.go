@@ -3,6 +3,7 @@ package controllers
 import (
 	"course-service/database"
 	"course-service/models"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -11,79 +12,58 @@ import (
 // SearchCourses выполняет поиск курсов
 func SearchCourses(c *gin.Context) {
 	query := c.Query("q")
-	if query == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Query parameter 'q' is required"})
-		return
-	}
-
-	var pagination models.PaginationParams
-	pagination.Page = 1
-	pagination.PageSize = 10
-
-	if err := c.ShouldBindQuery(&pagination); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
 	var courses []models.Course
-	searchQuery := database.DB.Model(&models.Course{}).Where("title ILIKE ?", "%"+query+"%")
 
-	var total int64
-	searchQuery.Count(&total)
+	tx := database.DB.Preload("Category")
 
-	offset := (pagination.Page - 1) * pagination.PageSize
-	if err := searchQuery.Offset(offset).Limit(pagination.PageSize).Find(&courses).Error; err != nil {
+	if query != "" {
+		tx = tx.Where("title ILIKE ? OR description ILIKE ?", "%"+query+"%", "%"+query+"%")
+	}
+
+	if err := tx.Find(&courses).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to search courses"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": courses,
-		"meta": gin.H{
-			"page":      pagination.Page,
-			"page_size": pagination.PageSize,
-			"total":     total,
-			"query":     query,
-		},
-	})
+	c.JSON(http.StatusOK, courses)
 }
 
-// SearchAuthors выполняет поиск авторов
-func SearchAuthors(c *gin.Context) {
-	query := c.Query("q")
-	if query == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Query parameter 'q' is required"})
+func SearchByPriceRange(c *gin.Context) {
+	minPrice := c.Query("min_price")
+	maxPrice := c.Query("max_price")
+
+	var courses []models.Course
+	tx := database.DB.Preload("Category")
+
+	if minPrice != "" {
+		tx = tx.Where("price >= ?", minPrice)
+	}
+	if maxPrice != "" {
+		tx = tx.Where("price <= ?", maxPrice)
+	}
+
+	if err := tx.Find(&courses).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to filter courses by price range"})
 		return
 	}
 
-	var pagination models.PaginationParams
-	pagination.Page = 1
-	pagination.PageSize = 10
+	c.JSON(http.StatusOK, courses)
+}
 
-	if err := c.ShouldBindQuery(&pagination); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+func SearchByCategory(c *gin.Context) {
+	categoryID := c.Param("category_id")
+	var courses []models.Course
 
-	var authors []models.Author
-	searchQuery := database.DB.Model(&models.Author{}).Where("name ILIKE ?", "%"+query+"%")
+	database.DB.Where("category_id = ?", categoryID).Find(&courses)
+	c.JSON(http.StatusOK, courses)
+}
 
-	var total int64
-	searchQuery.Count(&total)
+func SearchPopularCourses(c *gin.Context) {
+	var courses []models.Course
+	limitStr := c.DefaultQuery("limit", "10")
+	limit := 10 // значение по умолчанию
+	fmt.Sscanf(limitStr, "%d", &limit)
 
-	offset := (pagination.Page - 1) * pagination.PageSize
-	if err := searchQuery.Offset(offset).Limit(pagination.PageSize).Find(&authors).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to search authors"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data": authors,
-		"meta": gin.H{
-			"page":      pagination.Page,
-			"page_size": pagination.PageSize,
-			"total":     total,
-			"query":     query,
-		},
-	})
+	database.DB.Order("price DESC").Limit(limit).Find(&courses)
+	c.JSON(http.StatusOK, courses)
 }

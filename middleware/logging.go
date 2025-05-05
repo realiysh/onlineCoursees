@@ -15,7 +15,7 @@ func LoggingMiddleware() gin.HandlerFunc {
 		c.Set("RequestID", requestID)
 		c.Writer.Header().Set("X-Request-ID", requestID)
 
-		c.Next()
+		c.Next()l
 
 		duration := time.Since(start)
 		log.Printf("[%s] [RequestID: %s] %s %s - %d - Duration: %s",

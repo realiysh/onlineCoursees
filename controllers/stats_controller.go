@@ -25,37 +25,77 @@ func GetUserStats(c *gin.Context) {
 // GetCourseStats получает статистику по курсам
 func GetCourseStats(c *gin.Context) {
 	var totalCourses int64
+	var totalCategories int64
+	var avgPrice float64
+
 	database.DB.Model(&models.Course{}).Count(&totalCourses)
-
-	var newCoursesToday int64
-	database.DB.Model(&models.Course{}).Where("created_at >= NOW() - INTERVAL '1 day'").Count(&newCoursesToday)
-
-	// Средняя цена курсов
-	type AvgPriceResult struct {
-		AvgPrice float64
-	}
-	var avgPriceResult AvgPriceResult
-	database.DB.Model(&models.Course{}).Select("COALESCE(AVG(price), 0) as avg_price").Scan(&avgPriceResult)
-
-	// Топ авторов по количеству курсов
-	type AuthorWithCoursesCount struct {
-		ID           uint   `json:"id"`
-		Name         string `json:"name"`
-		CoursesCount int64  `json:"courses_count"`
-	}
-	var topAuthors []AuthorWithCoursesCount
-	database.DB.Table("authors").
-		Select("authors.id, authors.name, COUNT(courses.id) as courses_count").
-		Joins("JOIN courses ON authors.id = courses.author_id").
-		Group("authors.id").
-		Order("courses_count DESC").
-		Limit(5).
-		Scan(&topAuthors)
+	database.DB.Model(&models.Category{}).Count(&totalCategories)
+	database.DB.Model(&models.Course{}).Select("AVG(price)").Scan(&avgPrice)
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_courses":     totalCourses,
-		"new_courses_today": newCoursesToday,
-		"avg_price":         avgPriceResult.AvgPrice,
-		"top_authors":       topAuthors,
+		"total_courses":    totalCourses,
+		"total_categories": totalCategories,
+		"average_price":    avgPrice,
 	})
+}
+
+func GetCategoryStats(c *gin.Context) {
+	var stats []struct {
+		CategoryName string
+		CourseCount  int64
+		AvgPrice     float64
+	}
+
+	database.DB.Model(&models.Category{}).
+		Select("categories.name as category_name, COUNT(courses.id) as course_count, AVG(courses.price) as avg_price").
+		Joins("LEFT JOIN courses ON courses.category_id = categories.id").
+		Group("categories.id, categories.name").
+		Scan(&stats)
+
+	c.JSON(http.StatusOK, stats)
+}
+
+func GetPriceRangeStats(c *gin.Context) {
+	var stats struct {
+		MinPrice    float64
+		MaxPrice    float64
+		PriceRanges []struct {
+			Range string
+			Count int64
+		}
+	}
+
+	database.DB.Model(&models.Course{}).
+		Select("MIN(price) as min_price, MAX(price) as max_price").
+		Scan(&stats)
+
+	ranges := []struct {
+		min   float64
+		max   float64
+		label string
+	}{
+		{0, 50, "0-50"},
+		{50, 100, "50-100"},
+		{100, 200, "100-200"},
+		{200, 500, "200-500"},
+		{500, 1000, "500-1000"},
+		{1000, 999999, "1000+"},
+	}
+
+	for _, r := range ranges {
+		var count int64
+		database.DB.Model(&models.Course{}).
+			Where("price >= ? AND price < ?", r.min, r.max).
+			Count(&count)
+
+		stats.PriceRanges = append(stats.PriceRanges, struct {
+			Range string
+			Count int64
+		}{
+			Range: r.label,
+			Count: count,
+		})
+	}
+
+	c.JSON(http.StatusOK, stats)
 }

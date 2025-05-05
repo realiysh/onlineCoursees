@@ -42,7 +42,7 @@ func RunMigrations() error {
 			dbName = "postgres"
 		}
 		if dbPort == "" {
-			dbPort = "5432"
+			dbPort = "5433"
 		}
 	}
 

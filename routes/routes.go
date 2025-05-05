@@ -2,43 +2,35 @@ package routes
 
 import (
 	"course-service/controllers"
-	"course-service/middleware"
 
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(r *gin.Engine) {
+func RegisterRoutes(r *gin.Engine) {
 	api := r.Group("/api")
-
-	// === Публичные маршруты ===
-
-	// Курсы
-	api.GET("/courses", controllers.GetCourses)
-	api.GET("/courses/:id", controllers.GetCourseByID)
-
-	// Категории
-	api.GET("/categories", controllers.GetCategories)
-	api.GET("/categories/:id", controllers.GetCategoryByID)
-
-	// Поиск
-	api.GET("/search/courses", controllers.SearchCourses)
-	api.GET("/search/authors", controllers.SearchAuthors)
-
-	// === Защищённые маршруты ===
-	protected := api.Group("")
-	protected.Use(middleware.AuthMiddleware())
 	{
 		// Курсы
-		protected.POST("/courses", controllers.CreateCourse)
-		protected.PUT("/courses/:id", controllers.UpdateCourse)
-		protected.DELETE("/courses/:id", controllers.DeleteCourse)
+		api.GET("/courses", controllers.GetCourses)
+		api.POST("/courses", controllers.CreateCourse)
+		api.GET("/courses/:id", controllers.GetCourseByID)
+		api.DELETE("/courses/:id", controllers.DeleteCourse)
 
 		// Категории
-		protected.POST("/categories", controllers.CreateCategory)
-		protected.PUT("/categories/:id", controllers.UpdateCategory)
-		protected.DELETE("/categories/:id", controllers.DeleteCategory)
+		api.GET("/categories", controllers.GetCategories)
+		api.POST("/categories", controllers.CreateCategory)
+		api.GET("/categories/:id", controllers.GetCategoryByID)
+		api.PUT("/categories/:id", controllers.UpdateCategory)
+		api.DELETE("/categories/:id", controllers.DeleteCategory)
 
 		// Статистика
-		protected.GET("/stats/courses", controllers.GetCourseStats)
+		api.GET("/stats/courses", controllers.GetCourseStats)
+		api.GET("/stats/categories", controllers.GetCategoryStats)
+		api.GET("/stats/price-ranges", controllers.GetPriceRangeStats)
+
+		// Поиск
+		api.GET("/search/courses", controllers.SearchCourses)
+		api.GET("/search/price-range", controllers.SearchByPriceRange)
+		api.GET("/search/category/:category_id", controllers.SearchByCategory)
+		api.GET("/search/popular", controllers.SearchPopularCourses)
 	}
 }
