@@ -1,14 +1,31 @@
-FROM golang:1.21-alpine
+# Build stage
+FROM golang:1.23.0-alpine AS builder
 
 WORKDIR /app
 
+# Install build dependencies
+RUN apk add --no-cache gcc musl-dev
+
+# Copy and download dependencies
 COPY go.mod go.sum ./
 RUN go mod download
 
+# Copy source code and migrations
 COPY . .
 
-RUN go build -o main .
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 
-EXPOSE 8081
+# Final stage
+FROM alpine:latest
 
-CMD ["./main"] 
+WORKDIR /app
+
+# Copy binary and config files
+COPY --from=builder /app/main .
+COPY --from=builder /app/migrations ./migrations
+COPY .env .
+
+EXPOSE 8084
+
+CMD ["./main"]
