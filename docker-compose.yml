@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  course-service:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      course-db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=course-db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=course_service
+      - DB_PORT=5432
+    env_file:
+      - .env
+
+  course-db:
+    image: postgres:14
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=course_service
+    ports:
+      - "5434:5432"
+    volumes:
+      - course_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  course_postgres_data: 
