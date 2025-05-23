@@ -1,30 +1,31 @@
 package resty
 
 import (
+	"course-service/models" // <-- используй то, что указано в go.mod
 	"encoding/json"
 	"fmt"
-
 	"github.com/go-resty/resty/v2"
 )
 
-type User struct {
-	ID    uint   `json:"id"`
-	Email string `json:"email"`
-}
-
-func GetUserByID(id uint) (*User, error) {
+func Useruser(token string) (*models.User, error) {
 	client := resty.New()
 	resp, err := client.R().
+		SetHeader("Authorization", fmt.Sprintf("Bearer %s", token)).
 		SetHeader("Accept", "application/json").
-		Get(fmt.Sprintf("http://localhost:8080/api/users/%d", id))
+		Get("http://localhost:8084/api/profile")
+
+	fmt.Println("StatusCode:", resp.StatusCode())
+	fmt.Println("Response Body:", resp.String())
+	fmt.Println("Error:", err)
 
 	if err != nil || resp.StatusCode() != 200 {
-		return nil, fmt.Errorf("user not found")
+		return nil, fmt.Errorf("ошибка запроса: %v, статус: %d", err, resp.StatusCode())
 	}
 
-	var user User
+	var user models.User
 	if err := json.Unmarshal(resp.Body(), &user); err != nil {
 		return nil, err
 	}
+
 	return &user, nil
 }

@@ -3,9 +3,9 @@ package controllers
 import (
 	"course-service/database"
 	"course-service/models"
-	"net/http"
-
+	"course-service/resty"
 	"github.com/gin-gonic/gin"
+	"net/http"
 )
 
 func GetCourses(c *gin.Context) {
@@ -56,4 +56,19 @@ func DeleteCourse(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Course deleted"})
+}
+func ExampleGetUser(c *gin.Context) {
+	token := c.GetHeader("Authorization")
+	if token == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "нет токена"})
+		return
+	}
+
+	user, err := resty.Useruser(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "не удалось получить пользователя"})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
 }

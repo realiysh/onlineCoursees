@@ -32,5 +32,7 @@ func RegisterRoutes(r *gin.Engine) {
 		api.GET("/search/price-range", controllers.SearchByPriceRange)
 		api.GET("/search/category/:category_id", controllers.SearchByCategory)
 		api.GET("/search/popular", controllers.SearchPopularCourses)
+
+		api.GET("/whoami", controllers.ExampleGetUser)
 	}
 }
